@@ -149,8 +149,9 @@ these once in a herdr that is not holding work you care about:
 
 - The `prefix q` popup repaints pane borders in your theme's colours. It reads
   the theme named by `[theme] name` in your config and knows herdr 0.9.5's
-  built-in themes. For `terminal`, an unknown name, `auto_switch = true`, or
-  `[theme.custom]` colours it falls back to the default theme's colours, so the
+  built-in themes. For `terminal`, an unknown name, or `auto_switch = true` it
+  falls back to the default theme's colours, and `[theme.custom]` overrides are
+  not applied (the named theme's own colours are used). In those cases the
   borders can flash a different colour for the moment the numbers show.
 - A tab name that starts with digits and a colon, such as `12:30 standup`,
   loses that part when numbered: the colon marks a number prefix.

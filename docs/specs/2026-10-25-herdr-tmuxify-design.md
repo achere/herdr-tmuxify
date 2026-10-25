@@ -1,8 +1,26 @@
 # herdr-tmuxify — design
 
 **Date:** 2026-10-25
-**Status:** design approved in conversation; written spec awaiting review. Nothing
-is implemented yet.
+**Status:** implemented and tested on macOS (herdr 0.9.3) and Debian 13 arm64
+(herdr 0.9.5). The CI workflow has not run yet: the repo is not on GitHub.
+
+Where the build departs from the design first approved in conversation:
+
+- **Install is "unmerge, then merge".** Re-runs and option changes never stack,
+  and uninstall is the same code run backwards.
+- **Conflicts are found by trial, not by a table.** Each unit is added alone and
+  kept only if `herdr config check` shows nothing new. See "Verified during
+  implementation", item 4.
+- **Uninstall unlinks the plugins before stripping tab numbers.** The other order
+  is wrong: stripping renames tabs, and a still-linked numbering plugin answers
+  each rename by putting the numbers back.
+- **A skipped unit does not make the installer fail.** Skips are the expected
+  outcome of a user having their own settings; the installer exits 0 and lists
+  them with the line to add by hand.
+- **`display-panes` follows the user's theme** (the design had not noticed it
+  hardcoded one-dark's colours).
+- The GNU `stat` bug in `renumber.sh` was worse than expected: it aborts the
+  script, not just the staleness check.
 
 ## Goal
 
@@ -76,6 +94,7 @@ dotfiles.
 herdr-tmuxify/
   install.sh              the only entry point
   lib/merge.pl            tagged-line merge / unmerge of config.toml
+  lib/check.sh            herdr's config diagnostics for a file, one per line
   config/
     keys.toml             lines for [keys]
     ui.toml               the sidebar rows line for [ui.sidebar.spaces]
@@ -84,8 +103,12 @@ herdr-tmuxify/
     numbering/            herdr-plugin.toml, renumber.sh, renumber_test.sh
     display-panes/        herdr-plugin.toml, display-panes.pl, display-panes.t
   test/
-    run.sh                installer tests (runs on macOS and Linux)
-    linux.sh              runs everything in a Lima Debian VM
+    all.sh                merge, installer and both plugins' tests
+    merge.t               lib/merge.pl, with a fake validator
+    run.sh                install.sh end to end, with the real `config check`
+    e2e.sh                install into a real herdr server of its own
+    linux.sh              runs all of it in a Lima Debian VM
+    herdr-version         the herdr release the tests download
   .github/workflows/test.yml
   README.md  LICENSE  AGENTS.md  CLAUDE.md -> AGENTS.md
   docs/specs/             this document
@@ -100,22 +123,24 @@ keybindings.
   `herdr-tmuxify.numbering` / `herdr-tmuxify.display-panes`. The `prefix+q`
   binding in `commands.toml` points at `herdr-tmuxify.display-panes.show`.
 - `platforms = ["macos", "linux"]` in both manifests.
-- `numbering/renumber.sh`: the lock-staleness check uses BSD `stat -f %m`. On
-  GNU `stat`, `-f` means filesystem status, so the check fails silently and a
-  stuck lock never expires. Replace it with a portable mtime read through perl.
-  Any further GNU/BSD differences the Linux run exposes get the same treatment.
+- `numbering/renumber.sh`: the lock-staleness check used BSD `stat -f %m`. On
+  GNU `stat`, `-f` means filesystem status: it prints a multi-line report and
+  exits 1, the `|| printf "$now"` fallback glued a timestamp onto that report,
+  and the arithmetic aborted the whole script whenever the lock was contended.
+  `mtime_of` now tries `stat -c %Y` first and `stat -f %m` second and returns
+  plain epoch seconds or nothing; `lock_is_stale` treats an unreadable age as
+  "not stale". Both have unit tests that run on both platforms.
 - `display-panes/display-panes.pl` repaints each pane's border and scrollbar in
-  a popup, using a `%PALETTE` hardcoded to one-dark's colours. The snapshot
-  would therefore look wrong under herdr's default theme (catppuccin) or any
-  other of the eleven built-in themes, because the repainted cells would not
-  match the panes beneath the popup. The theme stays out of this repo, so the
-  palette must follow the user's theme. Required: the popup's colours match the
-  active `[theme] name`. Mechanism, in order of preference: (1) read the colours
-  at runtime if herdr exposes them (`herdr api snapshot` or another API call);
-  (2) ship a palette per built-in theme, keyed by `[theme] name`, taken from
-  herdr's source; (3) at minimum, the default theme's palette. Any theme not
-  covered (`terminal`, custom) falls back to the default theme's palette, and
-  the README states the limitation. See open item 6.
+  a popup, using a `%PALETTE` hardcoded to one-dark's colours. The theme stays
+  out of this repo, so a stranger's popup would not match their panes. It now
+  carries a table of the four colours it uses for each of herdr v0.9.5's
+  seventeen RGB themes (extracted from `src/app/state.rs`), reads `[theme] name`
+  from the config (`HERDR_CONFIG_PATH` or `~/.config/herdr/config.toml`), and
+  falls back to the default theme, catppuccin, for an unset or unknown name,
+  for `terminal` (ANSI names, no RGB) and for `auto_switch = true` (the active
+  theme then depends on the host's appearance). `[theme.custom]` overrides are
+  not applied: the named theme's own colours are used. A new herdr theme needs
+  a new row.
 - Comments are rewritten for a reader who has never seen the author's setup:
   no "the user confirmed", no references to `tmux.conf`, `.zshrc`, stow or
   other dotfiles paths. Technical lessons (why a key is spelled a certain way,
@@ -131,13 +156,15 @@ keybindings.
 2. **Locate config.** `$HERDR_CONFIG_PATH` if set, else
    `~/.config/herdr/config.toml`. If the file does not exist, start from an
    empty one.
-3. **Backup.** Before the first change, copy the file to
+3. **Backup.** Only if the file changes, copy it first to
    `config.toml.tmuxify-bak.<YYYYmmddHHMMSS>`.
-4. **Merge** through `lib/merge.pl`. Every line the installer adds ends in
+4. **Merge** through `lib/merge.pl`: remove everything of ours (the inverse
+   below), then add each unit. Every line the installer adds ends in
    `# herdr-tmuxify`.
    - *Scalar keys* (the `[keys]` bindings, `prefix`, sidebar `rows`) go under
-     their table, which is created if missing. A key the user already set is
-     skipped and reported. A key the user set to the same value counts as
+     their table, after its last setting so the user's lines stay on top; the
+     table is created at the end of the file if missing. A key the user already
+     set is skipped and reported. A key the user set to the same value counts as
      already applied. A commented-out key counts as unset.
    - *`--force`* replaces the user's scalar line and keeps the original as
      `# herdr-tmuxify-replaced: <original line>`, so uninstall can restore it.
@@ -147,23 +174,27 @@ keybindings.
      file between `# >>> herdr-tmuxify >>>` and `# <<< herdr-tmuxify <<<`.
      A block whose `key` is already used by another `[[keys.command]]` is
      skipped and reported; `--force` does not override it.
-   - *No chord is bound twice.* After the merge, no chord may be bound to two
-     actions in the effective config. The effective config is herdr's defaults
-     (`herdr --default-config`) overlaid by the merged file. The installer
-     skips whichever of our bindings would create a duplicate and reports it.
-     Examples that matter: a `[[keys.command]]` on `prefix+q` against a
-     `detach` that still holds herdr's default `prefix+q`; a popup on
-     `prefix+x` against a kept `close_pane`; and our `workspace_picker =
-     "prefix+s"` against a user who set `settings = "prefix+s"`. Open item 4
-     decides only whether `herdr config check` enforces this for us or the
-     installer must compute it.
-   - *Unsupported shapes.* If `keys` is written as a dotted key or an inline
-     table, the installer makes no edit, prints the lines to add by hand, and
-     exits non-zero.
+   - *Trial merge.* Each unit (one scalar line, or one command block) is added
+     on its own and kept only if `herdr config check` shows no diagnostic that
+     was not already there. A dropped unit is reported with herdr's own words.
+     This is how "no chord is bound twice" is enforced: herdr reports a chord
+     given to two explicit bindings, for example our `workspace_picker =
+     "prefix+s"` against a user's `settings = "prefix+s"`.
+   - *Requires.* herdr does not report a command binding that sits on the
+     default chord of an action the user left unset. So each command block
+     carries `# requires: table.key` in its fragment, naming the scalar that
+     frees its chord (`prefix+q`: `keys.detach`; `prefix+x`: `keys.close_pane`;
+     `prefix+&`: `keys.close_tab`), and is added only while that scalar is in
+     effect, whether we set it or the user already had the same value.
+   - *Unsupported shapes.* The editor works on lines, not TOML. If `keys` is
+     written as a dotted key or an inline table, adding `[keys]` is a TOML
+     error, herdr's check says so, and each affected unit is skipped with that
+     message and the line to add by hand. Nothing is half-applied.
    - *Symlinked config.* If `config.toml` is a symlink (stow users), write
      through it. Never rename a temp file over it.
-5. **Validate.** Run `herdr config check` on the merged file. If it prints any
-   diagnostic that the original file did not, restore the backup and abort.
+5. **Validate.** After writing, run `herdr config check` on the file once more.
+   The trial merge makes this a safety net: if it prints any diagnostic that
+   the original file did not, restore the original and abort.
 6. **Plugins.** `herdr plugin link <repo>/plugins/numbering` and
    `.../display-panes`. Linking is idempotent. The repo clone must stay in place;
    update with `git pull && ./install.sh`.
@@ -179,11 +210,14 @@ plugin links. It changes nothing.
    `--force`-replaced lines. A `[keys]`-style table header that the installer
    created (tagged) is removed only if no other line remains under it; if the
    user added keys under it since, the header stays. That is still valid TOML.
-2. Runs `renumber.sh --strip` against the running server, so tab names lose the
-   numbers the plugin wrote into them. Those names are custom names and would
-   persist after the plugin is gone. If no server is running, uninstall says that
-   the tabs keep their number prefixes until stripped by hand.
-3. Runs `herdr plugin unlink` on both plugins.
+2. Runs `herdr plugin unlink` on both plugins. This comes before the strip:
+   stripping renames tabs, and a still-linked numbering plugin answers each
+   rename (`tab.renamed`) by putting the numbers back.
+3. Runs `renumber.sh --strip` if a herdr server is running (detected by `herdr
+   workspace list` returning a result), so tab names lose the numbers the plugin
+   wrote into them. Those names are custom names and would persist after the
+   plugin is gone. If no server is running, uninstall says that the tabs keep
+   their number prefixes until stripped by hand.
 4. Leaves the backup files in place.
 
 The sidebar's `$n` token is runtime-only and disappears on its own.
@@ -205,12 +239,18 @@ The sidebar's `$n` token is runtime-only and disappears on its own.
 pointing into a short `mktemp -d`. Validation uses the real `herdr config check`.
 A shim `herdr` on `PATH` records `plugin link` / `unlink` calls and passes every
 other subcommand (including `config check` and `--version`) through to the real
-binary, so these tests never touch a live server. Cases: fresh install with no config; existing `[keys]`
-with a conflict; existing sidebar `rows`; symlinked config; second run;
-`--dry-run`; install then uninstall; `--force` then uninstall; a deliberately
-broken result (rolled back); each duplicate-chord case named above; a
-dotted/inline `keys`; an uninstall after the user added keys under an
-installer-created table header.
+binary, so these tests never touch a live server. The shim also plays a running
+server (for the tab-number strip) and can fail the final check on demand. Cases:
+fresh install; an existing config with a backup; a second run; `--dry-run`;
+install then uninstall; the user's own `detach`, `settings` on `prefix+s` and a
+popup on `prefix+x`; `--prefix`; `--force` then uninstall; a symlinked config; a
+config directory that does not exist; a final check that fails (rolled back); a
+missing `jq` or `herdr`; an unknown option; uninstall with and without a server.
+The cases run with only the tools `install.sh` is allowed to use on `PATH`, so a
+new dependency shows up as a failure. `test/merge.t` covers `lib/merge.pl` on its
+own with a fake validator, including the dotted-key and duplicate-block shapes,
+and the real fragments. Both were checked by mutation: five deliberate breakages
+of the installer were each caught.
 
 **Isolation lesson (learned while designing this).** Setting only `HOME` does
 not isolate herdr when the shell runs inside a herdr pane: the inherited
@@ -222,43 +262,46 @@ limited to about 104 bytes, and herdr's socket lives under the config directory.
 **Plugin tests.** `renumber_test.sh` and `display-panes.t` come across with the
 plugins and must pass on macOS and Linux.
 
+**End to end: `test/e2e.sh`.** Starts a real `herdr server` of its own under
+`env -i` and a throwaway `HOME`, then runs the real `install.sh` against it:
+both plugins are registered and the merged config passes `config check`; a tab
+renamed to `vim` becomes `1:vim`, a second becomes `2:build`, a third `3:logs`;
+closing the first renumbers the rest (several hook runs at once, so the lock and
+mtime path runs under the platform's own tools); a rename to the same name
+settles; no lock directory is left behind; `herdr plugin action invoke
+herdr-tmuxify.display-panes.show` is dispatched without an error (opening the
+popup itself needs an attached client); and `--uninstall` removes the numbers,
+the plugins and the config lines. A tab whose name is only digits is herdr's
+automatic name and is skipped by the plugin, so the script renames tabs first.
+
 **Linux: `test/linux.sh`.** Creates (once) and uses a Lima Debian VM named
-`herdr-tmuxify-test` (arm64; delete with `limactl delete`). Inside it: install
-herdr with herdr's own installer, install `jq`, run `./install.sh`, `test/run.sh`
-and the plugin tests, then start an isolated herdr server and run an
-end-to-end check against it:
+`herdr-tmuxify-test` (2 CPUs, 4 GB, 20 GB, arm64, no host mounts; `--delete`
+removes it). It installs `jq`, downloads the herdr release named in
+`test/herdr-version` as a binary (not by piping an install script into a shell),
+copies the repo in, and runs `test/all.sh` and `test/e2e.sh`. A developer tool;
+the README mentions it as optional.
 
-- real `plugin link`;
-- create two tabs and assert both were renamed with their numbers;
-- close the first tab and assert the second was renumbered. This is the only
-  automated test that runs `renumber.sh`'s lock and mtime path under GNU tools,
-  where breakage is expected;
-- invoke `display-panes show` through `herdr plugin action` and assert it exits
-  0 and the popup pane exists;
-- `./install.sh --uninstall` and assert no tab name keeps a number.
-
-This is a developer tool; the README mentions it as optional.
-
-**CI: `.github/workflows/test.yml`.** Runs `test/run.sh` and the plugin tests
-on `ubuntu-latest` (x86_64) and `macos-latest`. It covers the x86_64 Linux build
-that the local arm64 VM cannot. It installs herdr from a GitHub release asset of
-a tag pinned in the workflow, because the tests use the real `herdr config check`;
-the pin is bumped on purpose, not by accident.
+**CI: `.github/workflows/test.yml`.** Runs `test/all.sh` and `test/e2e.sh` on
+`ubuntu-latest` (x86_64) and `macos-latest`. It covers the x86_64 Linux build
+that the local arm64 VM cannot. It downloads the herdr release pinned in
+`test/herdr-version`, because the tests use the real `herdr config check`; the
+pin is bumped on purpose, not by accident. Written but not yet run.
 
 **Not automated: pressing the keys.** The README carries a short key-by-key
-checklist (the bindings above, `prefix+q` digits, both popups, tab and space
-numbers). It is run by hand, on macOS and in the Linux VM
-(`limactl shell herdr-tmuxify-test`), inside an isolated second herdr, never a
-live one. Keypress behaviour on Linux terminals is otherwise verified at the
-config level only. If `ctrl+space` does not register in a user's terminal, the
-README tells them to pass `--prefix`.
+checklist (splits, copy mode, both popups, `prefix+q` digits, last pane, tab
+and workspace numbers). It is for a person to run in a herdr that holds no work
+they care about, on each platform they use. Nobody has pressed those keys on
+Linux yet: Linux is verified at the config and server level only. If
+`ctrl+space` does not register in a user's terminal, the README tells them to
+pass a different `--prefix`.
 
 ## Verified during implementation (herdr 0.9.3 locally, docs for 0.9.5)
 
 1. `herdr plugin link` works with no server running. It writes the registry
    directly and starts no server, so the installer needs no running herdr.
-2. *Open:* which other GNU/BSD differences the Linux run exposes in
-   `renumber.sh`. Found by running the VM end-to-end check.
+2. The Linux run exposed no GNU/BSD difference in `renumber.sh` beyond the
+   `stat` call fixed above: the unit tests, the installer tests and the end-to-end
+   run all pass on Debian 13.
 3. `herdr config check` honours `HERDR_CONFIG_PATH` and reads `HOME`-relative
    `~/.config/herdr/config.toml` otherwise.
 4. `herdr config check` reports a chord used by two explicit bindings, either two
@@ -281,11 +324,13 @@ README tells them to pass `--prefix`.
    per built-in theme, extracted from herdr v0.9.5, and picks the entry named by
    `[theme] name` in the user's config. It falls back to the default theme's
    (catppuccin) for an unset or unknown name, for `terminal` (ANSI named colours
-   have no RGB), and when `auto_switch` or `[theme.custom]` colours are in use.
-   The README states these limits.
+   have no RGB), and when `auto_switch` is on; `[theme.custom]` overrides are not
+   applied. The README states these limits.
 
 ## Decisions for the author before publishing
 
-- **License.** Proposed: MIT. Not yet confirmed.
-- **GitHub owner and visibility.** The repo is created locally only. Pushing it
-  is a separate step, to be confirmed first.
+- **License.** `LICENSE` is MIT, in the author's name. A proposal, not a
+  decision; change it freely.
+- **GitHub owner and visibility.** The repo exists locally only. Pushing it is a
+  separate step, to be confirmed first. The README has no clone URL until then.
+- **Key checklist.** Not yet run by a person, on either platform.
