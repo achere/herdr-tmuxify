@@ -1,0 +1,39 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The herdr release is pinned in test/herdr-version: the tests use the
+      # real `herdr config check`, so a new herdr is bumped on purpose.
+      - name: Install herdr and jq
+        run: |
+          version=$(tr -d '[:space:]' < test/herdr-version)
+          case "$RUNNER_OS-$(uname -m)" in
+            Linux-x86_64)  asset=herdr-linux-x86_64 ;;
+            Linux-aarch64) asset=herdr-linux-aarch64 ;;
+            macOS-arm64)   asset=herdr-macos-aarch64 ;;
+            macOS-x86_64)  asset=herdr-macos-x86_64 ;;
+            *) echo "no herdr build for $RUNNER_OS-$(uname -m)"; exit 1 ;;
+          esac
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/herdr" "https://github.com/herdrdev/herdr/releases/download/$version/$asset"
+          chmod +x "$HOME/.local/bin/herdr"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          command -v jq >/dev/null || { if [ "$RUNNER_OS" = macOS ]; then brew install jq; else sudo apt-get install -y jq; fi; }
+
+      - name: Unit and installer tests
+        run: test/all.sh
+
+      - name: End to end, against a real herdr server
+        run: test/e2e.sh
