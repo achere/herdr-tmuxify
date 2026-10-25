@@ -253,22 +253,36 @@ live one. Keypress behaviour on Linux terminals is otherwise verified at the
 config level only. If `ctrl+space` does not register in a user's terminal, the
 README tells them to pass `--prefix`.
 
-## Open items (settle during implementation)
+## Verified during implementation (herdr 0.9.3 locally, docs for 0.9.5)
 
-1. Does `herdr plugin link` work with no server running? If not, the installer
-   says "start herdr, then re-run" and exits non-zero after the config merge.
-2. Which other GNU/BSD differences does the Linux run expose in `renumber.sh`?
-3. Does `herdr config check` honour `HERDR_CONFIG_PATH`? (The tests assume it, or
-   fall back to `HOME`.)
-4. Does `herdr config check` report two actions on one chord? If it does, the
-   no-duplicate-chord rule can lean on validation and rollback. If not, the
-   installer computes the effective chords itself from `herdr --default-config`.
-5. Does a running herdr pick up an edited `config.toml`, or does it need a
-   restart? The summary text depends on the answer.
-6. Can `display-panes.pl` read the active theme's colours at runtime? Look at
-   `herdr api snapshot` and the config reference's theme section. If not, which
-   built-in themes get a shipped palette, and where do their values come from
-   (herdr's `src/app/state.rs`)?
+1. `herdr plugin link` works with no server running. It writes the registry
+   directly and starts no server, so the installer needs no running herdr.
+2. *Open:* which other GNU/BSD differences the Linux run exposes in
+   `renumber.sh`. Found by running the VM end-to-end check.
+3. `herdr config check` honours `HERDR_CONFIG_PATH` and reads `HOME`-relative
+   `~/.config/herdr/config.toml` otherwise.
+4. `herdr config check` reports a chord used by two explicit bindings, either two
+   `[keys]` actions or two `[[keys.command]]` blocks, as `<chord>: kept A,
+   disabled B`. It does not report a command binding that sits on the default
+   chord of an action the user left unset. So the installer **trial-merges**:
+   it adds one unit at a time (a scalar line or a command block), runs `herdr
+   config check`, and drops the unit, with a report, if the check shows a
+   diagnostic that was not there before. No table of herdr default chords is
+   needed. A command block also declares the scalar it depends on (for
+   `prefix+q`, `detach`; for `prefix+x`, `close_pane`) and is skipped when that
+   scalar was not applied or already equal, because otherwise the command would
+   silently take over the chord of an action the user still expects.
+5. A running herdr re-reads `config.toml` on `herdr server reload-config` (or
+   the global menu's "reload config"). The installer prints that command; it does
+   not run it against a live server.
+6. herdr exposes no theme colours through its documented API. The built-in
+   palettes are in herdr's `src/app/state.rs`. Decision: `display-panes` ships a
+   table of the four colours it uses (accent, overlay0, overlay1, surface_dim)
+   per built-in theme, extracted from herdr v0.9.5, and picks the entry named by
+   `[theme] name` in the user's config. It falls back to the default theme's
+   (catppuccin) for an unset or unknown name, for `terminal` (ANSI named colours
+   have no RGB), and when `auto_switch` or `[theme.custom]` colours are in use.
+   The README states these limits.
 
 ## Decisions for the author before publishing
 
