@@ -2,7 +2,8 @@
 
 **Date:** 2026-10-25
 **Status:** implemented and tested on macOS (herdr 0.9.3) and Debian 13 arm64
-(herdr 0.9.5). The CI workflow has not run yet: the repo is not on GitHub.
+(herdr 0.9.5). The CI workflow ran once on GitHub (ubuntu-latest and
+macos-latest) and passed.
 
 Where the build departs from the design first approved in conversation:
 

@@ -15,7 +15,7 @@ There is no build. From the repo root, with `herdr`, `jq`, `perl`, `bash` on PAT
   numbering plugin.
 - `test/linux.sh` - the same inside a Lima Debian VM (`--delete` removes it).
   CI (`.github/workflows/test.yml`) runs `all.sh` and `e2e.sh` on ubuntu and
-  macOS; it has not been run yet, because the repo is not on GitHub.
+  macOS, with herdr pinned in `test/herdr-version`. The first run passed on both.
 
 ## Caveats
 
