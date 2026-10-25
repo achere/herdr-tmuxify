@@ -33,7 +33,8 @@ Usage: ./install.sh [--prefix KEY] [--force] [--dry-run]
   --uninstall   remove everything this added, unlink the plugins, and take the
                 numbers back out of tab names
 
-Your config is $HERDR_CONFIG_PATH, or ~/.config/herdr/config.toml.
+Your config is $HERDR_CONFIG_PATH if set, else $XDG_CONFIG_HOME/herdr/config.toml
+if that is set, else ~/.config/herdr/config.toml.
 EOF
 }
 
@@ -86,8 +87,18 @@ else
   say "note: could not read herdr's version; assuming it is at least $MIN_HERDR"
 fi
 
-[ -n "${HOME:-}" ] || [ -n "${HERDR_CONFIG_PATH:-}" ] || die "HOME is not set"
-CONFIG=${HERDR_CONFIG_PATH:-$HOME/.config/herdr/config.toml}
+# Where herdr reads its config: HERDR_CONFIG_PATH, else config.toml under
+# XDG_CONFIG_HOME, else under ~/.config. Writing to any other file would report
+# success and change nothing herdr reads.
+if [ -n "${HERDR_CONFIG_PATH:-}" ]; then
+  CONFIG=$HERDR_CONFIG_PATH
+elif [ -n "${XDG_CONFIG_HOME:-}" ]; then
+  CONFIG=$XDG_CONFIG_HOME/herdr/config.toml
+elif [ -n "${HOME:-}" ]; then
+  CONFIG=$HOME/.config/herdr/config.toml
+else
+  die "cannot tell where herdr's config is: set HERDR_CONFIG_PATH"
+fi
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/herdr-tmuxify.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT

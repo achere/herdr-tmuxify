@@ -121,6 +121,21 @@ for my $name (qw(catppuccin catppuccin-latte tokyo-night tokyo-night-day dracula
     is_deeply [sort keys %$p], [qw(accent overlay0 overlay1 surface_dim)], "$name has all four colours";
 }
 
+# config_path: where herdr reads its config. HERDR_CONFIG_PATH wins, then the
+# XDG base directory, then ~/.config. Reading the wrong file would hand the
+# popup the wrong colours without any error.
+{
+    local %ENV = (HOME => '/h');
+    is config_path(), '/h/.config/herdr/config.toml', 'config path: under HOME by default';
+    $ENV{XDG_CONFIG_HOME} = '/x';
+    is config_path(), '/x/herdr/config.toml', '... XDG_CONFIG_HOME moves it';
+    $ENV{XDG_CONFIG_HOME} = '';
+    is config_path(), '/h/.config/herdr/config.toml', '... an empty XDG_CONFIG_HOME is unset';
+    $ENV{XDG_CONFIG_HOME} = '/x';
+    $ENV{HERDR_CONFIG_PATH} = '/p/c.toml';
+    is config_path(), '/p/c.toml', '... HERDR_CONFIG_PATH wins over both';
+}
+
 # configured_theme: the config file's text in, the [theme] name out.
 is configured_theme(qq{[theme]\nname = "nord"\n}), 'nord', 'reads [theme] name';
 is configured_theme(qq{[theme]\nname = 'dracula'\n}), 'dracula', 'single-quoted string';

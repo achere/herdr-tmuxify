@@ -63,9 +63,10 @@ Then reload a running herdr, or restart it.
 herdr server reload-config
 ```
 
-The installer reads your config from `$HERDR_CONFIG_PATH`, or
-`~/.config/herdr/config.toml` when that is unset. A config that is a symlink
-(a stow or dotfiles setup) stays a symlink; the file behind it is edited.
+The installer edits the file herdr reads: `$HERDR_CONFIG_PATH` if set, else
+`$XDG_CONFIG_HOME/herdr/config.toml` if that is set, else
+`~/.config/herdr/config.toml`. A config that is a symlink (a stow or dotfiles
+setup) stays a symlink; the file behind it is edited.
 
 ### Options
 
@@ -144,6 +145,9 @@ these once in a herdr that is not holding work you care about:
 7. Rename a tab with `prefix` `,`: it becomes `1:name`. Open a second tab,
    rename it, and close the first: the second becomes `1:name`.
 8. `prefix` `Shift`+`2` jumps to the second workspace, once you have two.
+9. In NAVIGATE mode, `j` and `k` move through the workspace list. They are also
+   herdr's keys for moving between panes, so check that pane movement still
+   works there too: which of the two wins was never confirmed.
 
 ## Limits
 

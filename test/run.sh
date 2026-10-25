@@ -66,11 +66,16 @@ newcase() {
   CFG="$CASE/home/config.toml"
   LOG="$CASE/shim.log"; : >"$LOG"
   OUT="$CASE/out.txt"
-  unset HERDR_SHIM_SERVER_FILE
+  WHERE=path   # how install.sh is told where the config is: path, xdg or home
 }
 inst() { # inst <args...>: runs install.sh in the restricted environment
+  local where=()
+  case $WHERE in
+    path) where=(HERDR_CONFIG_PATH="$CFG") ;;
+    xdg)  where=(XDG_CONFIG_HOME="$XDG") ;;
+  esac   # home: neither variable, so ~/.config under HOME
   env -i PATH="$WORK/bin:$TOOLS:$JQDIR" HOME="$CASE/home" TMPDIR="$WORK" \
-    HERDR_CONFIG_PATH="$CFG" HERDR_SHIM_LOG="$LOG" REAL_HERDR="$REAL_HERDR" \
+    ${where[@]+"${where[@]}"} HERDR_SHIM_LOG="$LOG" REAL_HERDR="$REAL_HERDR" \
     HERDR_SHIM_SERVER="${SERVER:-}" HERDR_SHIM_BREAK="${BREAK:-}" \
     "$ROOT/install.sh" "$@" >"$OUT" 2>&1
 }
@@ -195,6 +200,31 @@ newcase
 CFG="$CASE/home/new/dir/config.toml"
 inst; rc=$?
 check "config directory that does not exist: created" "$([ $rc -eq 0 ] && [ -f "$CFG" ]; echo $?)" "$(cat "$OUT")"
+
+# herdr reads $XDG_CONFIG_HOME/herdr/config.toml when that is set. Installing
+# into ~/.config instead would report success and change nothing herdr reads.
+newcase
+WHERE=xdg
+XDG="$CASE/xdg"
+CFG="$XDG/herdr/config.toml"
+mkdir -p "$XDG/herdr"
+printf '[keys]\nprefix = "ctrl+a"\n' >"$CFG"
+cp "$CFG" "$CASE/orig.toml"
+inst; rc=$?
+check "XDG_CONFIG_HOME: exit 0" $rc "$(cat "$OUT")"
+check "... installs into the file herdr reads there" "$(has "$CFG" '# herdr-tmuxify'; echo $?)"
+check "... and creates nothing under ~/.config" "$([ ! -e "$CASE/home/.config" ]; echo $?)"
+check "... which herdr accepts" "$(env -i PATH="$TOOLS" HOME="$CASE/home" XDG_CONFIG_HOME="$XDG" "$REAL_HERDR" config check 2>&1 | grep -q '^config: ok'; echo $?)"
+inst --uninstall
+check "... and uninstall puts it back" "$(cmp -s "$CFG" "$CASE/orig.toml"; echo $?)"
+
+# Neither variable set: ~/.config/herdr/config.toml under HOME.
+newcase
+WHERE=home
+CFG="$CASE/home/.config/herdr/config.toml"
+inst; rc=$?
+check "no config variables: exit 0" $rc "$(cat "$OUT")"
+check "... installs into ~/.config/herdr/config.toml" "$([ -f "$CFG" ] && has "$CFG" '# herdr-tmuxify'; echo $?)"
 
 # --- safety ----------------------------------------------------------------------------------------
 

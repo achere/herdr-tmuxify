@@ -24,6 +24,10 @@ There is no build. From the repo root, with `herdr`, `jq`, `perl`, `bash` on PAT
   isolate herdr: `herdr plugin link` reaches the live server. Use `env -i`, and
   a short scratch dir (`/tmp/hx.XXXXXX`): socket paths are limited to ~104 bytes
   on macOS.
+- **Config path.** `HERDR_CONFIG_PATH`, else `$XDG_CONFIG_HOME/herdr/config.toml`,
+  else `~/.config/herdr/config.toml`. herdr honours XDG; resolve it the same way
+  in `install.sh` and `display-panes.pl` (`config_path`). A machine where
+  `XDG_CONFIG_HOME` is `~/.config` hides a mistake here.
 - **Key spellings are load-bearing.** `'prefix+"'`, `prefix+percent` and
   `prefix+[` were confirmed by pressing the keys. `herdr config check` only
   proves a name parses, never which physical key it matches. Do not "tidy" them.

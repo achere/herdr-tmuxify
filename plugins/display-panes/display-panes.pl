@@ -141,11 +141,17 @@ sub configured_theme {
     return $auto ? undef : $name;
 }
 
-# The theme named in herdr's config file, wherever it is: HERDR_CONFIG_PATH if
-# set, else ~/.config/herdr/config.toml. Undef when it cannot be read.
+# Where herdr reads its config: HERDR_CONFIG_PATH if set, else config.toml under
+# the XDG base directory, else under ~/.config.
+sub config_path {
+    return $ENV{HERDR_CONFIG_PATH} if length($ENV{HERDR_CONFIG_PATH} // '');
+    my $base = length($ENV{XDG_CONFIG_HOME} // '') ? $ENV{XDG_CONFIG_HOME} : ($ENV{HOME} // '') . '/.config';
+    return "$base/herdr/config.toml";
+}
+
+# The theme named in herdr's config file. Undef when it cannot be read.
 sub config_theme {
-    my $path = $ENV{HERDR_CONFIG_PATH} // (($ENV{HOME} // '') . '/.config/herdr/config.toml');
-    open my $fh, '<', $path or return undef;
+    open my $fh, '<', config_path() or return undef;
     local $/;
     return configured_theme(scalar <$fh>);
 }

@@ -50,7 +50,8 @@ without losing any of their own settings, and can remove all of it with
   registered with `herdr plugin link`; copying files is not enough.
 - **Platforms:** macOS and Linux. Windows is out of scope: the installer and
   plugins rely on bash, perl and `stty`. Linux and macOS use the same config
-  path, `~/.config/herdr/config.toml`; `HERDR_CONFIG_PATH` overrides it.
+  path, `~/.config/herdr/config.toml`; `XDG_CONFIG_HOME` moves it and
+  `HERDR_CONFIG_PATH` overrides both.
 - **herdr version:** `min_herdr_version = "0.9.1"` (as the plugins declare today).
   Tests run against the current stable release.
 - **Dependencies:** `herdr`, `bash` (3.2 compatible: macOS ships 3.2), `perl`
@@ -154,6 +155,7 @@ keybindings.
    missing, with a package-manager-neutral message (plus a `brew install` hint
    on macOS), and exit non-zero.
 2. **Locate config.** `$HERDR_CONFIG_PATH` if set, else
+   `$XDG_CONFIG_HOME/herdr/config.toml` if that is set, else
    `~/.config/herdr/config.toml`. If the file does not exist, start from an
    empty one.
 3. **Backup.** Only if the file changes, copy it first to
@@ -302,8 +304,13 @@ pass a different `--prefix`.
 2. The Linux run exposed no GNU/BSD difference in `renumber.sh` beyond the
    `stat` call fixed above: the unit tests, the installer tests and the end-to-end
    run all pass on Debian 13.
-3. `herdr config check` honours `HERDR_CONFIG_PATH` and reads `HOME`-relative
-   `~/.config/herdr/config.toml` otherwise.
+3. `herdr config check` honours `HERDR_CONFIG_PATH`. Otherwise herdr reads
+   `$XDG_CONFIG_HOME/herdr/config.toml` when `XDG_CONFIG_HOME` is set (checked:
+   with it pointing elsewhere, herdr ignored `~/.config` and kept its plugin
+   registry under the XDG directory), and `~/.config/herdr/config.toml` when not.
+   The installer and the display-panes plugin resolve the path the same way. The
+   design had missed the XDG case; it stayed hidden because on the author's
+   machine `XDG_CONFIG_HOME` equals `~/.config`.
 4. `herdr config check` reports a chord used by two explicit bindings, either two
    `[keys]` actions or two `[[keys.command]]` blocks, as `<chord>: kept A,
    disabled B`. It does not report a command binding that sits on the default
