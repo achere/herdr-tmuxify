@@ -43,10 +43,9 @@ check "strip refuses to empty a label 2" "10:"             "$(safe_stripped_labe
 # intentional outcome, not a surprise the next time this is touched.
 check "strip result may start with -"    "-foo"            "$(safe_stripped_label '1:-foo')"
 
-# The lock's age. BSD and GNU stat disagree on what `-f` means, and a GNU stat
-# fed the BSD spelling can print a non-numeric string and exit 0, which then
-# aborts the script's arithmetic. mtime_of must return plain epoch seconds on
-# both, or nothing.
+# The lock's age. BSD and GNU stat disagree on what `-f` means: a GNU stat fed
+# the BSD spelling prints a filesystem report, which would abort the script's
+# arithmetic. mtime_of must return plain epoch seconds on both, or nothing.
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/renumber-test.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 mkdir "$scratch/fresh" "$scratch/old"

@@ -61,8 +61,9 @@ safe_stripped_label() {
 # Seconds since the epoch at which <path> was last modified, or nothing.
 # GNU stat spells it `-c %Y`, BSD stat `-f %m`. GNU's spelling goes first: BSD
 # stat rejects `-c` outright, whereas a GNU stat fed `-f %m` takes it for a
-# filesystem query and can print a non-numeric string with exit status 0 - which
-# would then abort the arithmetic in lock_is_stale under `set -e`.
+# filesystem query, prints a multi-line report instead of a time and fails on
+# the `%m`. A fallback chained after it would glue its own output onto that
+# report, and the arithmetic in lock_is_stale would abort the script.
 mtime_of() {
   local out
   out=$(stat -c %Y "$1" 2>/dev/null) || out=$(stat -f %m "$1" 2>/dev/null) || return 0
