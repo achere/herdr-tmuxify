@@ -1,0 +1,16 @@
+# Sidebar row that shows each space's number, for the numbering plugin.
+# install.sh merges the line below into [ui.sidebar.spaces], tagged
+# `# herdr-tmuxify`.
+#
+# herdr draws no number in the expanded sidebar (the collapsed rail does). The
+# numbering plugin reports the position as an `$n` token and this row draws it.
+# The second row is herdr's default, repeated because setting `rows` replaces
+# the whole layout. It renders as "● 1 · project": the " · " is herdr's fixed
+# token separator. Until the plugin reports a number the token and its
+# separator disappear, so the row is safe to have on its own.
+#
+# If you already set `rows`, install.sh leaves it and prints the line to merge
+# by hand, unless you pass --force.
+
+[ui.sidebar.spaces]
+rows = [["state_icon", "$n", "workspace"], ["branch", "git_status"]]

@@ -1,0 +1,59 @@
+# Key bindings that make herdr follow tmux. install.sh merges each line below
+# into the [keys] table of your config.toml, tagged `# herdr-tmuxify`. The
+# comments here are documentation and are not copied.
+#
+# Only bindings that CONTRADICT tmux are set. herdr's defaults already match
+# tmux for h/j/k/l, z, x, c, n, p, 1-9 and ?, and `new_cwd = "follow"` already
+# reproduces tmux's `-c "#{pane_current_path}"`. The prefix is left alone too:
+# herdr's default, ctrl+b, is tmux's. Pass `--prefix KEY` to install.sh to set
+# another.
+#
+# Vocabulary: a herdr workspace is a tmux session, a tab is a window.
+
+[keys]
+# tmux `"` splits stacked, `%` side by side. herdr's vertical/horizontal names
+# are the opposite of tmux's -v/-h flag letters: split_vertical gives the
+# side-by-side split and split_horizontal the stacked one. herdr's `quote`
+# names the apostrophe, not `"`, so the literal double quote is required.
+# Lesson: `herdr config check` only proves a key name parses, never which
+# physical key it matches. Only pressing the key does.
+split_horizontal = 'prefix+"'
+split_vertical = "prefix+percent"
+
+# tmux d detaches. herdr's default detach, prefix+q, is freed for display-panes.
+detach = "prefix+d"
+
+# tmux , renames the window.
+rename_tab = "prefix+comma"
+
+# tmux & kills the window after a prompt; herdr's close_tab would not ask.
+# Unbound here; prefix+ampersand is bound to a confirming popup instead
+# (commands.toml). Same for close_pane and tmux's x, below.
+close_tab = ""
+close_pane = ""
+
+# tmux s is choose-session; a workspace is the nearest equivalent. herdr's
+# default prefix+w goes unbound, and Settings moves aside to make room.
+workspace_picker = "prefix+s"
+settings = "prefix+shift+s"
+
+# Jump to space 1-9, matching the numbers the numbering plugin draws in the
+# sidebar. Unset in herdr by default, and a deliberate extra: tmux has no
+# jump-to-session-by-number binding, but without it the numbers would be
+# decoration nothing acts on.
+switch_workspace = "prefix+shift+1..9"
+
+# tmux ; is last-pane. Unset in herdr by default.
+last_pane = "prefix+semicolon"
+
+# tmux [ enters copy mode; herdr's copy mode has the same vi-style motions.
+# This action is absent from `herdr --default-config`, which makes it look
+# unsupported when it is not. The literal `[` is required: bracketleft,
+# leftbracket, lbracket and openbracket are all rejected.
+copy_mode = "prefix+["
+
+# NAVIGATE mode moves through the workspace list and between panes with two
+# separate sets of bindings. The list ones default to the arrow keys; this puts
+# the list on vim keys, as tmux does with `mode-keys vi`.
+navigate_workspace_up = "k"
+navigate_workspace_down = "j"
