@@ -104,6 +104,18 @@ keybindings.
   GNU `stat`, `-f` means filesystem status, so the check fails silently and a
   stuck lock never expires. Replace it with a portable mtime read through perl.
   Any further GNU/BSD differences the Linux run exposes get the same treatment.
+- `display-panes/display-panes.pl` repaints each pane's border and scrollbar in
+  a popup, using a `%PALETTE` hardcoded to one-dark's colours. The snapshot
+  would therefore look wrong under herdr's default theme (catppuccin) or any
+  other of the eleven built-in themes, because the repainted cells would not
+  match the panes beneath the popup. The theme stays out of this repo, so the
+  palette must follow the user's theme. Required: the popup's colours match the
+  active `[theme] name`. Mechanism, in order of preference: (1) read the colours
+  at runtime if herdr exposes them (`herdr api snapshot` or another API call);
+  (2) ship a palette per built-in theme, keyed by `[theme] name`, taken from
+  herdr's source; (3) at minimum, the default theme's palette. Any theme not
+  covered (`terminal`, custom) falls back to the default theme's palette, and
+  the README states the limitation. See open item 6.
 - Comments are rewritten for a reader who has never seen the author's setup:
   no "the user confirmed", no references to `tmux.conf`, `.zshrc`, stow or
   other dotfiles paths. Technical lessons (why a key is spelled a certain way,
@@ -135,11 +147,16 @@ keybindings.
      file between `# >>> herdr-tmuxify >>>` and `# <<< herdr-tmuxify <<<`.
      A block whose `key` is already used by another `[[keys.command]]` is
      skipped and reported; `--force` does not override it.
-   - *Companion rule.* The `prefix+q` block must not coexist with a `detach`
-     bound to `prefix+q`, and the `prefix+x` block not with a `close_pane`
-     bound to `prefix+x`. If the user's own `detach` / `close_pane` value keeps
-     herdr's chord, the block is skipped and reported. Whether `herdr config
-     check` already reports duplicate chords is an open item below.
+   - *No chord is bound twice.* After the merge, no chord may be bound to two
+     actions in the effective config. The effective config is herdr's defaults
+     (`herdr --default-config`) overlaid by the merged file. The installer
+     skips whichever of our bindings would create a duplicate and reports it.
+     Examples that matter: a `[[keys.command]]` on `prefix+q` against a
+     `detach` that still holds herdr's default `prefix+q`; a popup on
+     `prefix+x` against a kept `close_pane`; and our `workspace_picker =
+     "prefix+s"` against a user who set `settings = "prefix+s"`. Open item 4
+     decides only whether `herdr config check` enforces this for us or the
+     installer must compute it.
    - *Unsupported shapes.* If `keys` is written as a dotted key or an inline
      table, the installer makes no edit, prints the lines to add by hand, and
      exits non-zero.
@@ -154,14 +171,29 @@ keybindings.
    reload herdr.
 
 `--dry-run` merges into a temporary copy and prints a diff and the planned
-plugin links. It changes nothing. `--uninstall` removes tagged lines and the
-marked block, restores `--force`-replaced lines, and runs `herdr plugin unlink`
-on both plugins.
+plugin links. It changes nothing.
+
+`--uninstall` does four things, in this order:
+
+1. Removes the tagged lines and the marked block, and restores
+   `--force`-replaced lines. A `[keys]`-style table header that the installer
+   created (tagged) is removed only if no other line remains under it; if the
+   user added keys under it since, the header stays. That is still valid TOML.
+2. Runs `renumber.sh --strip` against the running server, so tab names lose the
+   numbers the plugin wrote into them. Those names are custom names and would
+   persist after the plugin is gone. If no server is running, uninstall says that
+   the tabs keep their number prefixes until stripped by hand.
+3. Runs `herdr plugin unlink` on both plugins.
+4. Leaves the backup files in place.
+
+The sidebar's `$n` token is runtime-only and disappears on its own.
 
 **Invariants** (each has a test):
 
 - a second run changes nothing (byte-identical file);
-- install followed by uninstall returns the file to its original bytes;
+- install followed by uninstall, with no edits to the file in between, returns it
+  to its original bytes;
+- uninstall leaves no numbered tab names behind when a server is running;
 - `--dry-run` writes nothing;
 - the user's own lines are never edited, except under `--force`, and then
   reversibly;
@@ -176,7 +208,9 @@ other subcommand (including `config check` and `--version`) through to the real
 binary, so these tests never touch a live server. Cases: fresh install with no config; existing `[keys]`
 with a conflict; existing sidebar `rows`; symlinked config; second run;
 `--dry-run`; install then uninstall; `--force` then uninstall; a deliberately
-broken result (rolled back); a companion-rule conflict; a dotted/inline `keys`.
+broken result (rolled back); each duplicate-chord case named above; a
+dotted/inline `keys`; an uninstall after the user added keys under an
+installer-created table header.
 
 **Isolation lesson (learned while designing this).** Setting only `HOME` does
 not isolate herdr when the shell runs inside a herdr pane: the inherited
@@ -191,13 +225,25 @@ plugins and must pass on macOS and Linux.
 **Linux: `test/linux.sh`.** Creates (once) and uses a Lima Debian VM named
 `herdr-tmuxify-test` (arm64; delete with `limactl delete`). Inside it: install
 herdr with herdr's own installer, install `jq`, run `./install.sh`, `test/run.sh`
-and the plugin tests, then exercise the real `plugin link` / `unlink` against an
-isolated herdr server. This is a developer tool; the README mentions it as
-optional.
+and the plugin tests, then start an isolated herdr server and run an
+end-to-end check against it:
+
+- real `plugin link`;
+- create two tabs and assert both were renamed with their numbers;
+- close the first tab and assert the second was renumbered. This is the only
+  automated test that runs `renumber.sh`'s lock and mtime path under GNU tools,
+  where breakage is expected;
+- invoke `display-panes show` through `herdr plugin action` and assert it exits
+  0 and the popup pane exists;
+- `./install.sh --uninstall` and assert no tab name keeps a number.
+
+This is a developer tool; the README mentions it as optional.
 
 **CI: `.github/workflows/test.yml`.** Runs `test/run.sh` and the plugin tests
 on `ubuntu-latest` (x86_64) and `macos-latest`. It covers the x86_64 Linux build
-that the local arm64 VM cannot.
+that the local arm64 VM cannot. It installs herdr from a GitHub release asset of
+a tag pinned in the workflow, because the tests use the real `herdr config check`;
+the pin is bumped on purpose, not by accident.
 
 **Not automated: pressing the keys.** The README carries a short key-by-key
 checklist (the bindings above, `prefix+q` digits, both popups, tab and space
@@ -215,10 +261,14 @@ README tells them to pass `--prefix`.
 3. Does `herdr config check` honour `HERDR_CONFIG_PATH`? (The tests assume it, or
    fall back to `HOME`.)
 4. Does `herdr config check` report two actions on one chord? If it does, the
-   companion rule can lean on validation and rollback instead of a table of
-   herdr's default chords.
+   no-duplicate-chord rule can lean on validation and rollback. If not, the
+   installer computes the effective chords itself from `herdr --default-config`.
 5. Does a running herdr pick up an edited `config.toml`, or does it need a
    restart? The summary text depends on the answer.
+6. Can `display-panes.pl` read the active theme's colours at runtime? Look at
+   `herdr api snapshot` and the config reference's theme section. If not, which
+   built-in themes get a shipped palette, and where do their values come from
+   (herdr's `src/app/state.rs`)?
 
 ## Decisions for the author before publishing
 
