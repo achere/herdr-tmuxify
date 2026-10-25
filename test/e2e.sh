@@ -16,6 +16,8 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 H=$(mktemp -d /tmp/hxe.XXXXXX)
 SERVER_PID=""
 cleanup() {
+  # Ask the server to stop through its own socket first, then make sure.
+  hx herdr server stop >/dev/null 2>&1
   if [ -n "$SERVER_PID" ]; then kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null; fi
   rm -rf "$H"
 }
@@ -41,7 +43,9 @@ tab_id_by_label() { hx herdr tab list | jq -r --arg l "$1" '.result.tabs[] | sel
 
 # --- a server of our own ------------------------------------------------------------
 
-hx herdr server >"$H/server.log" 2>&1 &
+# Not through hx: backgrounding a shell function makes $! a subshell's pid, and
+# killing that would leave the server running.
+env -i PATH="$PATH" HOME="$H" TMPDIR="$H" herdr server >"$H/server.log" 2>&1 &
 SERVER_PID=$!
 wait_for 20 hx herdr workspace list
 check "an isolated herdr server is running" $? "$(tail -3 "$H/server.log" 2>/dev/null)"
