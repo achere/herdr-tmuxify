@@ -21,6 +21,7 @@ session, a herdr *tab* is a tmux window.
 | `prefix` `x` | close pane, after a `[y/N]` prompt |
 | `prefix` `&` | close tab, after a `[y/N]` prompt that shows its pane count |
 | `prefix` `q` | number every pane; press a digit to jump to that pane |
+| `prefix` `h` `j` `k` `l` | move to the pane on that side; of two there, the one you were in last, as tmux does |
 | `prefix` `s` | workspace picker |
 | `prefix` `S` | settings |
 | `prefix` `;` | last pane |
@@ -30,8 +31,7 @@ session, a herdr *tab* is a tmux window.
 
 Tabs are named `1:name`, `2:name` and so on, renumbered when you open, close or
 move one, and the sidebar shows each workspace's number. herdr's own bindings
-for `h` `j` `k` `l`, `z`, `c`, `n`, `p` and `1`..`9` already match tmux and are
-left alone.
+for `z`, `c`, `n`, `p` and `1`..`9` already match tmux and are left alone.
 
 ## Requirements
 
@@ -157,6 +157,9 @@ these once in a herdr that is not holding work you care about:
   falls back to the default theme's colours, and `[theme.custom]` overrides are
   not applied (the named theme's own colours are used). In those cases the
   borders can flash a different colour for the moment the numbers show.
+- Only `prefix` `h` `j` `k` `l` go back to the pane you were in. In NAVIGATE
+  mode, `h` `j` `k` `l` and the arrow keys are herdr's own and pick the first
+  pane in layout order.
 - A tab name that starts with digits and a colon, such as `12:30 standup`,
   loses that part when numbered: the colon marks a number prefix.
 - A tab whose name is only digits is herdr's own automatic name and is left
@@ -200,7 +203,7 @@ is pinned in [`test/herdr-version`](test/herdr-version).
 | `lib/merge.pl` | adds and removes the tagged lines |
 | `config/` | the bindings, as data |
 | `plugins/numbering/` | tab and workspace numbers |
-| `plugins/display-panes/` | `prefix q` |
+| `plugins/panes/` | `prefix q`, `prefix h` `j` `k` `l` |
 | `test/` | the tests |
 | `docs/specs/` | the design |
 

@@ -3,7 +3,7 @@
 # comments here are documentation and are not copied.
 #
 # Only bindings that CONTRADICT tmux are set. herdr's defaults already match
-# tmux for h/j/k/l, z, x, c, n, p, 1-9 and ?, and `new_cwd = "follow"` already
+# tmux for z, x, c, n, p, 1-9 and ?, and `new_cwd = "follow"` already
 # reproduces tmux's `-c "#{pane_current_path}"`. The prefix is left alone too:
 # herdr's default, ctrl+b, is tmux's. Pass `--prefix KEY` to install.sh to set
 # another.
@@ -45,6 +45,16 @@ switch_workspace = "prefix+shift+1..9"
 
 # tmux ; is last-pane. Unset in herdr by default.
 last_pane = "prefix+semicolon"
+
+# tmux h/j/k/l move to the pane on that side, and when two panes are there,
+# tmux picks the one focused last. herdr picks the first in layout order, so
+# from a full-height pane beside a stacked pair it always lands on the top
+# one. Unbound here; prefix+h/j/k/l are bound to the panes plugin instead
+# (commands.toml), which picks the way tmux does.
+focus_pane_left = ""
+focus_pane_down = ""
+focus_pane_up = ""
+focus_pane_right = ""
 
 # tmux [ enters copy mode; herdr's copy mode has the same vi-style motions.
 # This action is absent from `herdr --default-config`, which makes it look

@@ -2,7 +2,7 @@
 
 A public repo that makes [herdr](https://herdr.dev) behave like tmux. `install.sh`
 merges tmux-style key bindings into a user's `config.toml` as tagged, reversible
-lines, and links two plugins (`numbering`, `display-panes`) from the clone.
+lines, and links two plugins (`numbering`, `panes`) from the clone.
 macOS and Linux. Start with `README.md`; the design is in
 `docs/specs/2026-10-25-herdr-tmuxify-design.md`.
 
@@ -26,7 +26,7 @@ There is no build. From the repo root, with `herdr`, `jq`, `perl`, `bash` on PAT
   on macOS.
 - **Config path.** `HERDR_CONFIG_PATH`, else `$XDG_CONFIG_HOME/herdr/config.toml`,
   else `~/.config/herdr/config.toml`. herdr honours XDG; resolve it the same way
-  in `install.sh` and `display-panes.pl` (`config_path`). A machine where
+  in `install.sh` and `plugins/panes/Panes.pm` (`config_path`). A machine where
   `XDG_CONFIG_HOME` is `~/.config` hides a mistake here.
 - **Key spellings are load-bearing.** `'prefix+"'`, `prefix+percent` and
   `prefix+[` were confirmed by pressing the keys. `herdr config check` only
@@ -44,7 +44,12 @@ There is no build. From the repo root, with `herdr`, `jq`, `perl`, `bash` on PAT
   `renumber.sh` aborted on Linux because of it (`mtime_of` is the fix). Check
   any new `stat`, `sed -i`, `date`, `readlink` use on both. Scripts must stay
   bash 3.2 compatible (macOS).
-- **Theme colours.** `display-panes.pl` carries a palette table copied from
+- **Theme colours.** `Panes.pm` carries a palette table copied from
   herdr v0.9.5's `src/app/state.rs`; a new herdr theme needs a new row.
-- `plugins/` was copied from the author's dotfiles (commit `a94f29d`) and has
-  drifted since; there is no sync.
+- **`prefix+h/j/k/l` depend on the panes plugin.** `keys.toml` unbinds herdr's
+  `focus_pane_*`, so if the plugin is unlinked or broken those keys do nothing.
+  The design is in the spec's 2026-11-19 section.
+- **Focusing the focused pane fires no `pane.focused` event.** A test that
+  wants the hook to record a pane must move focus away from it first.
+- `plugins/` comes from the author's dotfiles: `numbering` at commit
+  `a94f29d`, `panes` at `541d466` without its copy mode. There is no sync.

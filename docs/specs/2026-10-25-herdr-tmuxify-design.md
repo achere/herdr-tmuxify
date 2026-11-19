@@ -23,6 +23,34 @@ Where the build departs from the design first approved in conversation:
 - The GNU `stat` bug in `renumber.sh` was worse than expected: it aborts the
   script, not just the staleness check.
 
+**2026-11-19: the `panes` plugin.** `display-panes` became the `panes` plugin
+(`herdr-tmuxify.panes`, action `display-panes`), with the socket API, the
+layout and the drawing in a shared `Panes.pm`, as in the author's setup. It
+also took over `prefix+h/j/k/l`:
+
+- herdr ranks the panes on a side by edge distance, then overlap, then layout
+  order (`find_in_direction`, `src/layout.rs`). From a full-height pane beside
+  a stacked pair the two tie on the first two, so herdr always picks the top
+  one. tmux picks the one focused last (`window_pane_choose_best`).
+- `focus.pl <dir>` does what tmux does: of the panes nearest that edge, the
+  one with the latest focus record; with one candidate, none with a record, or
+  a zoomed tab, it hands over to herdr's `pane.focus_direction`, which is what
+  herdr's own binding sends.
+- Records are a `stamps` file (pane id, time) in the plugin's state dir, keyed
+  by the server's socket. The action writes the pane it left and the pane it
+  landed on; the `pane.focused` hook (`focus.pl focused`) writes every other
+  focus change. Writes go under `flock` and land by rename; closed panes are
+  dropped on each write.
+- `keys.toml` unbinds `focus_pane_left/down/up/right`; `commands.toml` binds
+  the four actions, each block requiring its scalar.
+- Install and uninstall also unlink the retired `herdr-tmuxify.display-panes`
+  id, so an update leaves no stale link.
+- Tested on macOS and in the Debian VM, both on herdr 0.9.5. The 0.9.1 floor
+  stays: v0.9.1's source already has `pane.focus_direction` (its reply names
+  the focused pane), the `pane.focused` event, `HERDR_PLUGIN_EVENT_JSON` and
+  `HERDR_PLUGIN_STATE_DIR` for plugin commands, and pane rects in the
+  snapshot's layouts. Checked by reading the source, not by running 0.9.1.
+
 ## Goal
 
 A public repository that anyone running [herdr](https://herdr.dev) can clone to
@@ -65,9 +93,9 @@ without losing any of their own settings, and can remove all of it with
 
 | Piece | Behaviour |
 |---|---|
-| `[keys]` bindings | `split_horizontal = 'prefix+"'` (stacked), `split_vertical = "prefix+percent"` (side by side), `detach = "prefix+d"`, `rename_tab = "prefix+comma"`, `workspace_picker = "prefix+s"`, `settings = "prefix+shift+s"`, `last_pane = "prefix+semicolon"`, `copy_mode = "prefix+["`, `navigate_workspace_up = "k"`, `navigate_workspace_down = "j"`. `close_pane = ""` and `close_tab = ""` (the popups below replace them). |
+| `[keys]` bindings | `split_horizontal = 'prefix+"'` (stacked), `split_vertical = "prefix+percent"` (side by side), `detach = "prefix+d"`, `rename_tab = "prefix+comma"`, `workspace_picker = "prefix+s"`, `settings = "prefix+shift+s"`, `last_pane = "prefix+semicolon"`, `copy_mode = "prefix+["`, `navigate_workspace_up = "k"`, `navigate_workspace_down = "j"`. `close_pane = ""` and `close_tab = ""` (the popups below replace them). `focus_pane_left/down/up/right = ""` (the panes plugin replaces them). |
 | Confirm popups | `prefix+x` asks before closing a pane; `prefix+ampersand` asks before closing a tab. Single keypress, `y`/`Y` confirms, anything else declines. Need `jq` and `bash`. |
-| `display-panes` plugin | `prefix+q` paints a number on each pane; a digit focuses that pane; any other key or 3 s closes it. |
+| `panes` plugin | `prefix+q` paints a number on each pane; a digit focuses that pane; any other key or 3 s closes it. `prefix+h/j/k/l` move to the pane on that side, and of two there, to the one focused last. |
 | `numbering` plugin | Keeps tab numbers in tab names and space numbers in the sidebar. Ships with `switch_workspace = "prefix+shift+1..9"` and the sidebar row `rows = [["state_icon", "$n", "workspace"], ["branch", "git_status"]]`. |
 | Prefix | Not set by default: herdr's own `ctrl+b` is stock tmux's prefix. `./install.sh --prefix KEY` sets another (for example `ctrl+space`). |
 
@@ -100,10 +128,12 @@ herdr-tmuxify/
   config/
     keys.toml             lines for [keys]
     ui.toml               the sidebar rows line for [ui.sidebar.spaces]
-    commands.toml         [[keys.command]] blocks: two popups + display-panes
+    commands.toml         [[keys.command]] blocks: two popups, display-panes,
+                          prefix+h/j/k/l
   plugins/
     numbering/            herdr-plugin.toml, renumber.sh, renumber_test.sh
-    display-panes/        herdr-plugin.toml, display-panes.pl, display-panes.t
+    panes/                herdr-plugin.toml, Panes.pm, display-panes.pl,
+                          focus.pl, display-panes.t, focus.t
   test/
     all.sh                merge, installer and both plugins' tests
     merge.t               lib/merge.pl, with a fake validator
@@ -199,8 +229,9 @@ keybindings.
    The trial merge makes this a safety net: if it prints any diagnostic that
    the original file did not, restore the original and abort.
 6. **Plugins.** `herdr plugin link <repo>/plugins/numbering` and
-   `.../display-panes`. Linking is idempotent. The repo clone must stay in place;
-   update with `git pull && ./install.sh`.
+   `.../panes`, after unlinking the retired `herdr-tmuxify.display-panes`.
+   Linking is idempotent. The repo clone must stay in place; update with
+   `git pull && ./install.sh`.
 7. **Summary.** Print what was applied, what was skipped and why, and how to
    reload herdr.
 
@@ -262,8 +293,8 @@ live setup, and `herdr plugin link` then talks to the live server. Use
 `env -i`. The scratch directory must also be short: a macOS socket path is
 limited to about 104 bytes, and herdr's socket lives under the config directory.
 
-**Plugin tests.** `renumber_test.sh` and `display-panes.t` come across with the
-plugins and must pass on macOS and Linux.
+**Plugin tests.** `renumber_test.sh`, `display-panes.t` and `focus.t` come
+across with the plugins and must pass on macOS and Linux.
 
 **End to end: `test/e2e.sh`.** Starts a real `herdr server` of its own under
 `env -i` and a throwaway `HOME`, then runs the real `install.sh` against it:
@@ -272,8 +303,11 @@ renamed to `vim` becomes `1:vim`, a second becomes `2:build`, a third `3:logs`;
 closing the first renumbers the rest (several hook runs at once, so the lock and
 mtime path runs under the platform's own tools); a rename to the same name
 settles; no lock directory is left behind; `herdr plugin action invoke
-herdr-tmuxify.display-panes.show` is dispatched without an error (opening the
-popup itself needs an attached client); and `--uninstall` removes the numbers,
+herdr-tmuxify.panes.display-panes` is dispatched without an error (opening the
+popup itself needs an attached client); in a tab split as 1 | 2 over 3 the
+focus actions take `[3] h → 1 → l` back to 3 and `[2] h → 1 → l` back to 2,
+focus moved without them counts through the hook, no records gives herdr's
+own pick, and a closed pane leaves the records; and `--uninstall` removes the numbers,
 the plugins and the config lines. A tab whose name is only digits is herdr's
 automatic name and is skipped by the plugin, so the script renames tabs first.
 

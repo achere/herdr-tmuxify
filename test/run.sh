@@ -94,7 +94,8 @@ check "... which herdr's own check accepts" "$(herdr_ok "$CFG"; echo $?)"
 check "... with our tagged lines" "$(has "$CFG" 'split_horizontal = '"'"'prefix+"'"'"' # herdr-tmuxify'; echo $?)"
 check "... and the popup block" "$(has "$CFG" '# >>> herdr-tmuxify >>>'; echo $?)"
 check "... links both plugins" "$([ "$(grep -c '^plugin link' "$LOG")" = 2 ]; echo $?)" "$(cat "$LOG")"
-check "... by their directories in the clone" "$(has "$LOG" "$ROOT/plugins/numbering"; echo $?)"
+check "... by their directories in the clone" "$(has "$LOG" "$ROOT/plugins/numbering" && has "$LOG" "$ROOT/plugins/panes"; echo $?)"
+check "... and unlinks display-panes, which panes replaced" "$(has "$LOG" 'plugin unlink herdr-tmuxify.display-panes'; echo $?)" "$(cat "$LOG")"
 check "... makes no backup of a file that was not there" "$([ "$(backups)" = 0 ]; echo $?)"
 check "... and tells how to reload herdr" "$(has "$OUT" 'herdr server reload-config'; echo $?)"
 
@@ -117,8 +118,8 @@ check "... and makes no second backup" "$([ "$(backups)" = 1 ]; echo $?)"
 inst --uninstall; rc=$?
 check "uninstall: exit 0" $rc "$(cat "$OUT")"
 check "... returns the original bytes" "$(cmp -s "$CFG" "$CASE/orig.toml"; echo $?)"
-check "... and unlinks both plugins" "$([ "$(grep -c '^plugin unlink' "$LOG")" = 2 ]; echo $?)" "$(cat "$LOG")"
-check "... by id" "$(has "$LOG" 'plugin unlink herdr-tmuxify.numbering'; echo $?)"
+check "... and unlinks both plugins by id" "$(has "$LOG" 'plugin unlink herdr-tmuxify.numbering' && has "$LOG" 'plugin unlink herdr-tmuxify.panes'; echo $?)" "$(cat "$LOG")"
+check "... and the display-panes one panes replaced" "$([ "$(grep -c '^plugin unlink herdr-tmuxify.display-panes' "$LOG")" -ge 1 ]; echo $?)" "$(cat "$LOG")"
 
 # --- dry run ---------------------------------------------------------------------------
 
@@ -141,8 +142,17 @@ check "own detach: exit 0" $rc "$(cat "$OUT")"
 check "... still valid" "$(herdr_ok "$CFG"; echo $?)"
 check "... the report says it was skipped" "$(hasre "$OUT" 'skipped +keys\.detach'; echo $?)"
 check "... and keeps their line" "$(has "$CFG" 'detach = "prefix+q"'; echo $?)"
-check "... without the display-panes binding that needed it" "$(! has "$CFG" 'herdr-tmuxify.display-panes.show'; echo $?)"
+check "... without the display-panes binding that needed it" "$(! has "$CFG" 'herdr-tmuxify.panes.display-panes'; echo $?)"
 check "... but with the other popups" "$(has "$CFG" 'key = "prefix+x"'; echo $?)"
+
+newcase
+printf '[keys]\nfocus_pane_left = "prefix+h"\n' >"$CFG"
+inst; rc=$?
+check "own focus_pane_left: exit 0" $rc "$(cat "$OUT")"
+check "... still valid" "$(herdr_ok "$CFG"; echo $?)"
+check "... keeps their line" "$(has "$CFG" 'focus_pane_left = "prefix+h"'; echo $?)"
+check "... without our prefix+h, which would take that chord" "$(! has "$CFG" 'herdr-tmuxify.panes.focus-left'; echo $?)"
+check "... but with prefix+l" "$(has "$CFG" 'herdr-tmuxify.panes.focus-right'; echo $?)"
 
 # herdr itself reports this one: two explicit bindings on prefix+s.
 newcase

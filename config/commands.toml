@@ -41,7 +41,7 @@ height = "20%"
 command = '''bash -c 't=$(herdr api snapshot | jq -r .result.snapshot.focused_tab_id); l=$(herdr tab get "$t" | jq -r .result.tab.label); n=$(herdr pane list | jq -r "[.result.panes[]|select(.tab_id==\"$t\")]|length"); printf "Close tab %s (%s panes)? [y/N] " "$l" "$n"; read -n 1 -r a; echo; case "$a" in [yY]) herdr tab close "$t" ;; esac' '''
 
 # tmux `prefix q` is display-panes: numbers the panes, press one to jump. herdr
-# has no such feature, so the display-panes plugin (plugins/display-panes)
+# has no such feature, so the panes plugin (plugins/panes, display-panes.pl)
 # rebuilds it: a full-size popup repaints each pane with a big digit on it. 1-9
 # focuses that pane; any other key, or 3 s of nothing, closes it. A zoomed tab
 # is unzoomed while the numbers show and zoomed again unless another pane is
@@ -50,5 +50,40 @@ command = '''bash -c 't=$(herdr api snapshot | jq -r .result.snapshot.focused_ta
 [[keys.command]]
 key = "prefix+q"
 type = "plugin_action"
-command = "herdr-tmuxify.display-panes.show"
+command = "herdr-tmuxify.panes.display-panes"
 description = "display panes"
+
+# tmux `prefix h/j/k/l` move to the pane on that side, and when two panes are
+# there, tmux picks the one focused last. herdr picks the first in layout
+# order: from a full-height pane beside a stacked pair it always lands on the
+# top one, wherever you came from. The panes plugin (plugins/panes, focus.pl)
+# picks the way tmux does. It leaves the pick to herdr when only one pane is
+# that way, when none of them was focused before, and in a zoomed tab.
+# keys.toml unbinds herdr's own focus_pane_* to free these chords.
+# requires: keys.focus_pane_left
+[[keys.command]]
+key = "prefix+h"
+type = "plugin_action"
+command = "herdr-tmuxify.panes.focus-left"
+description = "focus pane left"
+
+# requires: keys.focus_pane_down
+[[keys.command]]
+key = "prefix+j"
+type = "plugin_action"
+command = "herdr-tmuxify.panes.focus-down"
+description = "focus pane down"
+
+# requires: keys.focus_pane_up
+[[keys.command]]
+key = "prefix+k"
+type = "plugin_action"
+command = "herdr-tmuxify.panes.focus-up"
+description = "focus pane up"
+
+# requires: keys.focus_pane_right
+[[keys.command]]
+key = "prefix+l"
+type = "plugin_action"
+command = "herdr-tmuxify.panes.focus-right"
+description = "focus pane right"

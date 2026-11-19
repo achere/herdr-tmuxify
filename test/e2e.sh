@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End to end, against a real herdr server of its own: install, watch the
 # numbering plugin renumber tabs as they come and go, run the display-panes
-# action, uninstall. This is the one test that runs renumber.sh's lock and
+# action, move focus with prefix+h/j/k/l's actions, uninstall. This is the one test that runs renumber.sh's lock and
 # mtime path under the platform's own tools (GNU on Linux, BSD on macOS).
 #
 # The server runs under `env -i` with a throwaway HOME, so it never meets a
@@ -55,7 +55,7 @@ check "an isolated herdr server is running" $? "$(tail -3 "$H/server.log" 2>/dev
 out=$(hx "$ROOT/install.sh" 2>&1); rc=$?
 check "install.sh against a running server: exit 0" $rc "$out"
 plugins=$(hx herdr plugin list 2>&1)
-check "... both plugins are registered" "$(echo "$plugins" | grep -q 'herdr-tmuxify.numbering' && echo "$plugins" | grep -q 'herdr-tmuxify.display-panes'; echo $?)" "$plugins"
+check "... both plugins are registered" "$(echo "$plugins" | grep -q 'herdr-tmuxify.numbering' && echo "$plugins" | grep -q 'herdr-tmuxify.panes'; echo $?)" "$plugins"
 check "... and herdr accepts the merged config" "$(hx herdr config check | grep -q '^config: ok'; echo $?)" "$(hx herdr config check)"
 
 # --- the numbering plugin, on this platform's tools ------------------------------------------
@@ -98,9 +98,55 @@ check "no stuck lock after the dust settles" $? "$(find "$H" -type d -name lock 
 
 # Opening the popup itself needs an attached client; what this proves is that
 # herdr knows the action and dispatches it.
-out=$(hx herdr plugin action invoke herdr-tmuxify.display-panes.show 2>&1); rc=$?
+out=$(hx herdr plugin action invoke herdr-tmuxify.panes.display-panes 2>&1); rc=$?
 check "the display-panes action is dispatched: exit 0" $rc "$out"
 check "... with a result and no error" "$(echo "$out" | jq -e 'has("result") and (has("error") | not)' >/dev/null 2>&1; echo $?)" "$out"
+
+# --- prefix+h/j/k/l ------------------------------------------------------------------------------------
+
+# The tab "1:build" split into 1 on the left, 2 top right, 3 bottom right.
+# From 1, both 2 and 3 are to the right and tie on everything herdr ranks
+# by, so herdr always picks 2; the plugin picks the one focused last.
+focused() { hx herdr api snapshot | jq -r .result.snapshot.focused_pane_id; }
+focused_is() { [ "$(focused)" = "$1" ]; }
+focus_pane() { # focus_pane <id>: as a mouse click would, without the actions
+  hx perl -I"$ROOT/plugins/panes" -MPanes -e 'api("pane.focus", { pane_id => $ARGV[0] })' "$1"
+  wait_for 5 focused_is "$1" && sleep 0.3   # and give the pane.focused hook its turn
+}
+press() { # press <direction> <pane>: run the action, wait for focus to land on <pane>
+  hx herdr plugin action invoke "herdr-tmuxify.panes.focus-$1" >/dev/null
+  wait_for 5 focused_is "$2"; local rc=$?
+  sleep 0.3
+  return $rc
+}
+p1=$(hx herdr pane list | jq -r --arg t "$(tab_id_by_label "1:build")" '[.result.panes[] | select(.tab_id == $t)][0].pane_id')
+p2=$(hx herdr pane split "$p1" --direction right | jq -r '.. | .pane_id? // empty' | grep -vx "$p1" | head -1)
+p3=$(hx herdr pane split "$p2" --direction down | jq -r '.. | .pane_id? // empty' | grep -vx -e "$p1" -e "$p2" | head -1)
+check "a tab split as 1 | 2 over 3" "$([ -n "$p1" ] && [ -n "$p2" ] && [ -n "$p3" ]; echo $?)" "1=$p1 2=$p2 3=$p3"
+
+focus_pane "$p3"
+press left "$p1";  check "[3] h -> 1" $? "at $(focused)"
+press right "$p3"; check "[1] l -> 3, where it came from (herdr alone: 2)" $? "at $(focused)"
+focus_pane "$p2"
+press left "$p1";  check "[2] h -> 1" $? "at $(focused)"
+press right "$p2"; check "[1] l -> 2" $? "at $(focused)"
+press down "$p3";  check "[2] j -> 3, the only pane below" $? "at $(focused)"
+
+stamps=$(find "$H" -name stamps -path '*herdr-tmuxify.panes*' | head -1)
+check "the focus records are in the plugin's state dir" "$([ -f "$stamps" ]; echo $?)" "$(find "$H" -name stamps)"
+# Focus is on 3 here, and focusing the focused pane fires no event: go
+# through 2 first, so 3 is recorded after 2 by the hook alone.
+rm -f "$stamps"
+focus_pane "$p2"; focus_pane "$p3"; focus_pane "$p1"
+press right "$p3"; check "focus moved without the actions counts too (the pane.focused hook)" $? "at $(focused)"
+rm -f "$stamps"
+focus_pane "$p1"; rm -f "$stamps"
+press right "$p2"; check "no records: herdr's own pick" $? "at $(focused)"
+
+hx herdr pane close "$p2" >/dev/null
+focus_pane "$p3"
+check "a closed pane leaves the records" "$(! grep -q "^$p2	" "$stamps"; echo $?)" "$(cat "$stamps" 2>/dev/null)"
+hx herdr pane close "$p3" >/dev/null
 
 # --- uninstall -------------------------------------------------------------------------------------------
 

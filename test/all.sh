@@ -11,10 +11,11 @@ step() { printf '\n== %s\n' "$1"; shift; "$@" || status=1; }
 # these at a live setup.
 clean() { env -i PATH="$PATH" HOME="${HOME:-/tmp}" TMPDIR="${TMPDIR:-/tmp}" "$@"; }
 
-step "merge (test/merge.t)"                    clean perl "$ROOT/test/merge.t"
-step "installer (test/run.sh)"                 clean bash "$ROOT/test/run.sh"
-step "numbering plugin (renumber_test.sh)"     clean bash "$ROOT/plugins/numbering/renumber_test.sh"
-step "display-panes plugin (display-panes.t)"  clean perl "$ROOT/plugins/display-panes/display-panes.t"
+step "merge (test/merge.t)"                       clean perl "$ROOT/test/merge.t"
+step "installer (test/run.sh)"                    clean bash "$ROOT/test/run.sh"
+step "numbering plugin (renumber_test.sh)"        clean bash "$ROOT/plugins/numbering/renumber_test.sh"
+step "panes plugin: prefix+q (display-panes.t)"   clean perl "$ROOT/plugins/panes/display-panes.t"
+step "panes plugin: prefix+h/j/k/l (focus.t)"     clean perl "$ROOT/plugins/panes/focus.t"
 
 echo
 if [ "$status" -eq 0 ]; then echo "ALL TESTS PASSED"; else echo "SOME TESTS FAILED"; fi

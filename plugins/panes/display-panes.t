@@ -1,5 +1,6 @@
 #!/usr/bin/perl
-# Checks display-panes.pl's pure layer: snapshot in, layout, keys, scrollbar
+# Checks display-panes.pl's pure layer, with the parts of it in Panes.pm
+# (layout, theme colours, config path): snapshot in, layout, keys, scrollbar
 # and frame out. No herdr server involved. Run: perl display-panes.t
 use strict;
 use warnings;

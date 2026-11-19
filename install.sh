@@ -15,7 +15,10 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 MIN_HERDR=0.9.1
-PLUGINS="numbering display-panes"   # herdr plugin ids are herdr-tmuxify.<name>
+PLUGINS="numbering panes"   # herdr plugin ids are herdr-tmuxify.<name>
+# Plugins an older version linked, unlinked on install and uninstall so an
+# update leaves no stale link. display-panes is now part of panes.
+RETIRED_PLUGINS="display-panes"
 
 die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
 say() { printf '%s\n' "$*"; }
@@ -169,6 +172,7 @@ if [ "$UNINSTALL" = 1 ]; then
   for p in $PLUGINS; do
     herdr plugin unlink "herdr-tmuxify.$p" >/dev/null 2>&1 || say "  (plugin herdr-tmuxify.$p was not linked)"
   done
+  for p in $RETIRED_PLUGINS; do herdr plugin unlink "herdr-tmuxify.$p" >/dev/null 2>&1 || true; done
   say "Unlinked the plugins."
   if server_running; then
     if "$ROOT/plugins/numbering/renumber.sh" --strip; then say "Took the numbers out of tab names."
@@ -211,6 +215,7 @@ $worse"
   fi
 fi
 
+for p in $RETIRED_PLUGINS; do herdr plugin unlink "herdr-tmuxify.$p" >/dev/null 2>&1 || true; done
 for p in $PLUGINS; do
   herdr plugin link "$ROOT/plugins/$p" >/dev/null \
     || die "herdr plugin link failed for $p. The config is already merged; fix the problem and run ./install.sh again."

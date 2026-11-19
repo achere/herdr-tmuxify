@@ -206,10 +206,14 @@ is $have{'keys.close_pane'}, '""', 'config: close_pane is unbound for the popup'
 ok exists $have{'ui.sidebar.spaces.rows'}, 'config: the sidebar rows line';
 ok !exists $have{'keys.prefix'}, 'config: no prefix unless asked';
 ok !grep({ /focus_agent|theme|pane_borders|tab_bar_right/ } keys %have), 'config: nothing personal';
-is join(',', map { $_->{key} } @{ $real->{blocks} }), 'prefix+x,prefix+ampersand,prefix+q', 'config: three command blocks';
+is $have{"keys.focus_pane_$_"}, '""', "config: focus_pane_$_ is unbound for the panes plugin" for qw(left down up right);
+is join(',', map { $_->{key} } @{ $real->{blocks} }),
+    'prefix+x,prefix+ampersand,prefix+q,prefix+h,prefix+j,prefix+k,prefix+l', 'config: seven command blocks';
 my %need = map { ($_->{key} => $_->{requires}) } @{ $real->{blocks} };
-is_deeply \%need, { 'prefix+x' => 'keys.close_pane', 'prefix+ampersand' => 'keys.close_tab', 'prefix+q' => 'keys.detach' },
-    'config: each popup names the scalar it needs';
+is_deeply \%need, { 'prefix+x' => 'keys.close_pane', 'prefix+ampersand' => 'keys.close_tab', 'prefix+q' => 'keys.detach',
+    'prefix+h' => 'keys.focus_pane_left', 'prefix+j' => 'keys.focus_pane_down', 'prefix+k' => 'keys.focus_pane_up',
+    'prefix+l' => 'keys.focus_pane_right' },
+    'config: each command block names the scalar it needs';
 my ($whole, $wrep) = merge_config('', $real);
 is unmerge($whole), '', 'config: the real fragments round-trip an empty file';
 ok !grep({ $_->{status} eq 'skipped' } @$wrep), 'config: nothing is skipped on an empty file';
